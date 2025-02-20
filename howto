@@ -1,0 +1,125 @@
+Yes! We can build a scenario on AWS that demonstrates Kubernetes' single-tenancy model while showcasing how namespaces, network policies, and RBAC provide soft multi-tenancy. Here’s how we can structure it:
+
+---
+
+### **Scenario: Soft Multi-Tenancy in AWS EKS**
+**Objective:**  
+Deploy an AWS Elastic Kubernetes Service (EKS) cluster and configure it to support multiple teams (e.g., "team-alpha" and "team-beta") using **namespaces**, **network policies**, and **RBAC**.
+
+---
+
+### **Step 1: Deploy a Single-Tenant Kubernetes Cluster on AWS**
+1. **Provision an EKS Cluster** using AWS EKS:
+   - Use **eksctl** or Terraform to create an EKS cluster with worker nodes.
+   - Ensure worker nodes are in a private subnet for security.
+
+   ```bash
+   eksctl create cluster --name my-eks-cluster --region us-east-1 --nodegroup-name my-nodes --nodes 3
+   ```
+
+2. **Verify cluster creation**:
+   ```bash
+   kubectl get nodes
+   ```
+
+---
+
+### **Step 2: Set Up Soft Multi-Tenancy with Namespaces**
+1. Create two namespaces for different teams:
+   ```bash
+   kubectl create namespace team-alpha
+   kubectl create namespace team-beta
+   ```
+
+2. Deploy sample applications for each team in their respective namespaces:
+   ```bash
+   kubectl apply -f app-deployment.yaml -n team-alpha
+   kubectl apply -f app-deployment.yaml -n team-beta
+   ```
+
+---
+
+### **Step 3: Apply Network Policies to Restrict Communication**
+1. **Deny all cross-namespace traffic** by default:
+   ```yaml
+   apiVersion: networking.k8s.io/v1
+   kind: NetworkPolicy
+   metadata:
+     name: deny-all
+     namespace: team-alpha
+   spec:
+     podSelector: {}
+     policyTypes:
+       - Ingress
+       - Egress
+   ```
+
+2. **Allow only necessary communication**, such as ingress from an internal service:
+   ```yaml
+   apiVersion: networking.k8s.io/v1
+   kind: NetworkPolicy
+   metadata:
+     name: allow-internal
+     namespace: team-alpha
+   spec:
+     podSelector: {}
+     ingress:
+       - from:
+           - namespaceSelector:
+               matchLabels:
+                 name: team-alpha
+   ```
+
+---
+
+### **Step 4: Implement RBAC to Restrict Access**
+1. **Create a Role for team-alpha to allow specific actions:**
+   ```yaml
+   apiVersion: rbac.authorization.k8s.io/v1
+   kind: Role
+   metadata:
+     namespace: team-alpha
+     name: team-alpha-role
+   rules:
+   - apiGroups: [""]
+     resources: ["pods"]
+     verbs: ["get", "list", "create", "delete"]
+   ```
+
+2. **Bind the Role to a user or group (team-alpha developers):**
+   ```yaml
+   apiVersion: rbac.authorization.k8s.io/v1
+   kind: RoleBinding
+   metadata:
+     namespace: team-alpha
+     name: team-alpha-rolebinding
+   subjects:
+   - kind: User
+     name: team-alpha-user
+     apiGroup: rbac.authorization.k8s.io
+   roleRef:
+     kind: Role
+     name: team-alpha-role
+     apiGroup: rbac.authorization.k8s.io
+   ```
+
+---
+
+### **Step 5: Validate Soft Multi-Tenancy**
+1. Ensure **team-alpha** users **cannot** access team-beta resources:
+   ```bash
+   kubectl get pods -n team-beta --as team-alpha-user
+   ```
+
+2. Ensure network policies prevent **cross-namespace** communication.
+
+3. Validate **RBAC restrictions** by attempting unauthorized actions.
+
+---
+
+### **Outcome**
+- The cluster remains a **single-tenant** Kubernetes environment.
+- Soft multi-tenancy is enforced using **namespaces, network policies, and RBAC**.
+- Each team operates independently but shares the same underlying infrastructure.
+
+Would you like to enhance this by integrating **AWS IAM roles for service accounts** or **AWS PrivateLink for additional security**? 🚀
